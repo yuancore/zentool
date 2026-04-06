@@ -3,12 +3,11 @@ package pool
 import (
 	"context"
 	"errors"
-	"fmt"
-	"github.com/panjf2000/ants/v2"
-	"github.com/small-ek/antgo/os/alog"
-	"go.uber.org/zap"
+	"log"
 	"runtime/debug"
 	"sync"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 const (
@@ -21,12 +20,38 @@ var (
 	userPanicHandler func(ctx context.Context, r interface{}, stack []byte)
 )
 
+// Logger 接口，用于解耦日志，可选注入
+type Logger interface {
+	Error(msg string, fields ...any)
+	Info(msg string, fields ...any)
+}
+
+// 默认 Logger，使用标准库 log 打印
+type defaultLogger struct{}
+
+func (d defaultLogger) Error(msg string, fields ...any) {
+	log.Println("[ERROR]", msg, fields)
+}
+
+func (d defaultLogger) Info(msg string, fields ...any) {
+	log.Println("[INFO]", msg, fields)
+}
+
+// logger 实例，默认使用 defaultLogger
+var logger Logger = defaultLogger{}
+
+// SetLogger 允许用户注入自己的 Logger
+func SetLogger(l Logger) {
+	if l != nil {
+		logger = l
+	}
+}
+
 // JobPool 暴露全局 Goroutine 池实例（只读）
 var JobPool *ants.Pool
 
 // New 初始化 Goroutine 池（线程安全）
 // size: Goroutine 数量, queueSize: 最大阻塞任务数
-// 重复初始化返回错误
 func New(size, queueSize int) error {
 	if size <= 0 {
 		return errors.New("pool size must be positive")
@@ -50,7 +75,7 @@ func New(size, queueSize int) error {
 		ants.WithMaxBlockingTasks(queueSize),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create pool: %w", err)
+		return errors.New("failed to create pool: " + err.Error())
 	}
 
 	jobPool = pool
@@ -102,18 +127,15 @@ func OnPanic(handler func(ctx context.Context, r interface{}, stack []byte)) {
 	userPanicHandler = handler
 }
 
+// handlePanic 捕获 panic 并记录日志，调用用户自定义处理器
 func handlePanic(ctx context.Context) {
 	if r := recover(); r != nil {
 		stack := debug.Stack()
-		if alog.Write != nil {
-			// 默认日志记录
-			alog.Error(ctx, "goroutine panic recovered",
-				zap.Any("recover", r),
-				zap.Any("stack", debug.Stack()),
-			)
-		}
 
-		// 用户自定义处理器
+		// 使用 Logger 接口记录
+		logger.Error("goroutine panic recovered", r, stack)
+
+		// 调用用户自定义处理
 		if userPanicHandler != nil {
 			userPanicHandler(ctx, r, stack)
 		}
