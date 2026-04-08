@@ -17,6 +17,7 @@ const (
 var (
 	jobPool          *ants.Pool
 	jobPoolLock      sync.RWMutex
+	handlerMu        sync.RWMutex // guards userPanicHandler and logger
 	userPanicHandler func(ctx context.Context, r interface{}, stack []byte)
 )
 
@@ -40,10 +41,12 @@ func (d defaultLogger) Info(msg string, fields ...any) {
 // logger 实例，默认使用 defaultLogger
 var logger Logger = defaultLogger{}
 
-// SetLogger 允许用户注入自己的 Logger
+// SetLogger 允许用户注入自己的 Logger（并发安全）
 func SetLogger(l Logger) {
 	if l != nil {
+		handlerMu.Lock()
 		logger = l
+		handlerMu.Unlock()
 	}
 }
 
@@ -122,22 +125,27 @@ func Release() {
 	}
 }
 
-// OnPanic 设置用户自定义 panic 处理函数（可用于上报监控、报警等）
+// OnPanic 设置用户自定义 panic 处理函数（可用于上报监控、报警等，并发安全）
 func OnPanic(handler func(ctx context.Context, r interface{}, stack []byte)) {
+	handlerMu.Lock()
 	userPanicHandler = handler
+	handlerMu.Unlock()
 }
 
-// handlePanic 捕获 panic 并记录日志，调用用户自定义处理器
+// handlePanic 捕获 panic 并记录日志，调用用户自定义处理器（并发安全）
 func handlePanic(ctx context.Context) {
 	if r := recover(); r != nil {
 		stack := debug.Stack()
 
-		// 使用 Logger 接口记录
-		logger.Error("goroutine panic recovered", r, stack)
+		handlerMu.RLock()
+		l := logger
+		h := userPanicHandler
+		handlerMu.RUnlock()
 
-		// 调用用户自定义处理
-		if userPanicHandler != nil {
-			userPanicHandler(ctx, r, stack)
+		l.Error("goroutine panic recovered", r, stack)
+
+		if h != nil {
+			h(ctx, r, stack)
 		}
 	}
 }

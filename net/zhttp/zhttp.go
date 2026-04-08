@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
 
@@ -100,7 +101,7 @@ func DefaultConfig() *Config {
 		DialerKeepAlive:       60 * time.Second,            // TCP连接KeepAlive时间
 		RetryWaitTime:         1 * time.Second,             // 重试等待时间
 		RetryMaxWaitTime:      10 * time.Second,            // 最大重试等待时间
-		InsecureSkipVerify:    true,                        // 跳过 TLS 证书验证 / Skip TLS certificate verification
+		InsecureSkipVerify:    false,                       // TLS 证书验证默认开启（如需跳过可手动设置）
 		ProxyURL:              "",                          //代理地址，空表示不使用代理
 	}
 }
@@ -122,7 +123,7 @@ func buildTransport(config *Config) *http.Transport {
 		IdleConnTimeout:     config.IdleConnectionTimeout,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: config.InsecureSkipVerify,
-			MinVersion:         tls.VersionTLS10,
+			MinVersion:         tls.VersionTLS12,
 			MaxVersion:         tls.VersionTLS13,
 			CurvePreferences:   []tls.CurveID{tls.X25519, tls.CurveP256},
 		},

@@ -2,26 +2,13 @@ package search
 
 import (
 	"golang.org/x/exp/constraints"
-	"unsafe"
 )
 
-// IndexOf 线性搜索优化版（性能提升约15%-20%）
-// Optimized linear search (15-20% performance improvement)
+// IndexOf 线性搜索（标准 range 实现，GC 安全，编译器自动优化边界检查）
+// Linear search using standard range loop (GC-safe, compiler-optimized bounds check elimination)
 func IndexOf[T comparable](slice []T, key T) int {
-	// 使用指针操作优化内存访问
-	// Optimize memory access using pointer operations
-	if len(slice) == 0 {
-		return -1
-	}
-
-	// 使用unsafe绕过切片边界检查
-	// Bypass slice bounds check using unsafe
-	ptr := unsafe.Pointer(unsafe.SliceData(slice))
-	size := unsafe.Sizeof(slice[0])
-
-	for i := 0; i < len(slice); i++ {
-		elem := *(*T)(unsafe.Pointer(uintptr(ptr) + uintptr(i)*size))
-		if elem == key {
+	for i, v := range slice {
+		if v == key {
 			return i
 		}
 	}

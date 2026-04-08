@@ -105,6 +105,7 @@ func MapInt(any any) (data map[int]interface{}) {
 		return nil
 	}
 
+	data = make(map[int]interface{}, len(temp))
 	for k, v := range temp {
 		intKey, err := strconv.Atoi(k)
 		if err != nil {

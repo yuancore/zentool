@@ -199,16 +199,25 @@ func (t *Times) Format(layout string, chinese ...bool) string {
 	return d
 }
 
+// padInt 写入至少 width 位前导零的整数，避免 fmt.Sprintf 开销
+// padInt writes value zero-padded to at least width digits, avoiding fmt.Sprintf overhead
+func padInt(b *strings.Builder, value int, width int) {
+	s := strconv.Itoa(value)
+	for i := len(s); i < width; i++ {
+		b.WriteByte('0')
+	}
+	b.WriteString(s)
+}
+
 // parseLayout [yyyy-MM-dd]->{{.year}}-{{.month}}-{{.day}}
 func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 	if len(strings.TrimSpace(layout)) == 0 {
 		return "", ErrLayout
 	}
-	ti := time.Unix(t.Time.Unix(), t.Time.UnixNano()/1e6%t.Time.Unix())
+	ti := t.Time
 	year, monthNumber, dayOfMonth := t.Time.Date()
 	thisMonthFirstDay := time.Date(year, monthNumber, 1, 0, 0, 0, 0, time.Local)
 	thisYearFirstDay := time.Date(year, 1, 1, 0, 0, 0, 0, time.Local)
-	yearRight := year % 100
 	monthCom := monthNumber.String()
 	monthAbbr := monthAbbr[monthNumber-1]
 	weekOfMonth := (t.Time.Day()-1)/7 + 1
@@ -222,12 +231,7 @@ func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 		weekOfYear = 1
 	}
 	hour, minute, second := t.Time.Clock()
-	unix := t.Time.Unix()
-	var millisecond int64
-	if unix > 0 {
-		unixNano := t.Time.UnixNano()
-		millisecond = unixNano % unix
-	}
+	millisecond := int64(t.Time.Nanosecond()) / 1e6 // 0-999 ms within current second
 	rfc822z := ti.Format("-0700")
 	stz := ti.Format("MST")
 	var am bool
@@ -242,9 +246,9 @@ func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 		case 'y': // 年[year]
 			y, endIndex := end(i, layout, 'y')
 			if length := len(y); length > 3 {
-				times.WriteString(fmt.Sprintf("%d", year))
+				padInt(times, year, 4)
 			} else {
-				times.WriteString(fmt.Sprintf("%0*d", 2, yearRight))
+				padInt(times, year%100, 2)
 			}
 			i = endIndex
 		case 'M': // 月[month]
@@ -254,38 +258,32 @@ func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 			} else if length == 3 {
 				times.WriteString(monthAbbr)
 			} else {
-				validLength := int(monthNumber / 10)
-				times.WriteString(fmt.Sprintf("%0*d", 2-validLength, monthNumber))
+				padInt(times, int(monthNumber), 2)
 			}
 			i = endIndex
 		case 'w': // 年中的周数[number]
 			w, endIndex := end(i, layout, 'w')
-			validLength := len(w)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, weekOfYear))
+			padInt(times, weekOfYear, len(w))
 			i = endIndex
 		case 'W': // 月份中的周数[number]
 			W, endIndex := end(i, layout, 'W')
-			validLength := len(W)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, relativeWeekOfMonth))
+			padInt(times, relativeWeekOfMonth, len(W))
 			i = endIndex
 		case 'D': // 年中的天数[number]
 			D, endIndex := end(i, layout, 'D')
-			validLength := len(D)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, dayOfYear))
+			padInt(times, dayOfYear, len(D))
 			i = endIndex
 		case 'd': // 月份中的天数[number]
 			d, endIndex := end(i, layout, 'd')
-			validLength := len(d)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, dayOfMonth))
+			padInt(times, dayOfMonth, len(d))
 			i = endIndex
 		case 'F': // 月份中的星期[number]
 			F, endIndex := end(i, layout, 'F')
-			var numberLength = 1
+			numberLength := 1
 			if weekOfMonth > 9 {
 				numberLength = 2
 			}
-			validLength := len(F) - numberLength + 1
-			times.WriteString(fmt.Sprintf("%0*d", validLength, weekOfMonth))
+			padInt(times, weekOfMonth, len(F)-numberLength+1)
 			i = endIndex
 		case 'E': // 星期中的天数[text]
 			E, endIndex := end(i, layout, 'E')
@@ -297,7 +295,7 @@ func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 				} else if length == 3 {
 					times.WriteString(weekDayAbbr[dayOfWeek])
 				} else {
-					times.WriteString(fmt.Sprintf("%0*d", length, dayOfWeek))
+					padInt(times, int(dayOfWeek), length)
 				}
 			}
 			i = endIndex
@@ -319,46 +317,39 @@ func (t *Times) parseLayout(layout string, chinese bool) (string, error) {
 			i = endIndex
 		case 'H': // 一天中的小时数，0-23[number]
 			H, endIndex := end(i, layout, 'H')
-			validLength := len(H)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, hour))
+			padInt(times, hour, len(H))
 			i = endIndex
 		case 'k': // 一天中的小时数，1-24[number]
 			k, endIndex := end(i, layout, 'k')
-			validLength := len(k)
 			if hour == 0 {
-				times.WriteString(fmt.Sprintf("%0*d", validLength, 1))
+				padInt(times, 1, len(k))
 			} else {
-				times.WriteString(fmt.Sprintf("%0*d", validLength, hour))
+				padInt(times, hour, len(k))
 			}
 			i = endIndex
 		case 'K': // am/pm小时数，0-11[number]
 			K, endIndex := end(i, layout, 'K')
-			validLength := len(K)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, hour%12))
+			padInt(times, hour%12, len(K))
 			i = endIndex
 		case 'h': // am/pm小时数,1-12[number]
 			h, endIndex := end(i, layout, 'h')
-			validLength := len(h)
 			if hour == 0 {
-				times.WriteString(fmt.Sprintf("%0*d", validLength, 1))
+				padInt(times, 1, len(h))
 			} else {
-				times.WriteString(fmt.Sprintf("%0*d", validLength, (hour)%12))
+				padInt(times, hour%12, len(h))
 			}
 			i = endIndex
 		case 'm': // 小时中的分钟数[number]
 			m, endIndex := end(i, layout, 'm')
-			validLength := len(m)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, minute))
+			padInt(times, minute, len(m))
 			i = endIndex
 		case 's': // 分钟中的秒数[number]
 			s, endIndex := end(i, layout, 's')
-			validLength := len(s)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, second))
+			padInt(times, second, len(s))
 			i = endIndex
 		case 'S': // 毫秒数[number]
 			S, endIndex := end(i, layout, 'S')
-			validLength := len(S)
-			times.WriteString(fmt.Sprintf("%0*d", validLength, millisecond))
+			padInt(times, int(millisecond), len(S))
 			i = endIndex
 		case 'z': // 时区（General）
 			_, endIndex := end(i, layout, 'z')

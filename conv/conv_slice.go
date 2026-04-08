@@ -110,17 +110,15 @@ func Interfaces(any interface{}) []interface{} {
 		// 已经是 []interface{}，直接返回
 		return v
 	case []byte, []int, []int32, []int64, []string, []bool, [][]byte, []float64, []float32:
-		// Marshal then unmarshal to []interface{}
-		// 使用 JSON 编码再解码
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil
+		// Direct reflection conversion instead of JSON round-trip
+		// 直接反射转换，避免 JSON 编解码的开销
+		val := reflect.ValueOf(v)
+		n := val.Len()
+		arr := make([]interface{}, n)
+		for i := 0; i < n; i++ {
+			arr[i] = val.Index(i).Interface()
 		}
-		var arr []interface{}
-		if err := json.Unmarshal(b, &arr); err == nil {
-			return arr
-		}
-		return nil
+		return arr
 	case string:
 		// Parse JSON array string to []interface{}
 		// 尝试解析 JSON 数组字符串

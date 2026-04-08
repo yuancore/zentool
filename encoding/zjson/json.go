@@ -1,12 +1,16 @@
 package zjson
 
 import (
-	"encoding/json"
 	"os"
 	"strings"
 
+	jsoniter "github.com/json-iterator/go"
+
 	"github.com/yuancore/zentool/conv"
 )
+
+// json 使用与标准库兼容的高性能 json-iterator 实例
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // Json is a wrapper for JSON data parsing and manipulation
 // Json 是用于JSON数据解析和操作的封装结构
